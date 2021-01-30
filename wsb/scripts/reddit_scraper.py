@@ -15,8 +15,8 @@ def comment_dict( comment ):
     """
     build a dict of comment fields to be published to the client
     """
-    return {'body_html':comment.body_html, 
-            'author': {'name': comment.author.name,'created_utc':comment.author.created_utc },
+    return {'body':comment.body, 
+            'author': {'name': comment.author.name,'created_utc':comment.author.created_utc, 'karma':comment.author.link_karma },
             'link_permalink ':comment.permalink,
             'post_title': comment.submission.title,
             # 'total_awards_recieved': comment.total_awards_received , # this will always be zero for new comments 
@@ -52,11 +52,6 @@ class Scraper:
             return( False )
         if comment.author is None or comment.created_utc <= self.last_comment_time:
             return( False )
-    
-        retard = self.client.redditor( comment.author )
-        days_old = ( time.time() - retard.created_utc ) / (60*60*24 )
-        logger.debug( "{} is {} days old!".format(comment.author, days_old))
-        return( days_old > 700 )
 
     def authenticate(self):
         logger.info( "authenticating...")
@@ -76,19 +71,18 @@ class Scraper:
         i = min( len(submission.comments)-1, 10 ) # show the last couple comments in case nothing is live
 
         while True:
-            self.socketio.sleep(0.3)
+            # self.socketio.sleep(0.3)
             if i:
                 comment = submission.comments[i]
                 i -= 1
-                if self.is_certified( comment ):
-                    try:
-                        st = datetime.datetime.fromtimestamp(comment.created_utc).strftime('%Y-%m-%d %H:%M:%S')
-                        logger.info("User:{} - {}".format(comment.author, st))
-                        logger.info(comment.body )
-                        self.send_updates(comment)
-                        # self.last_comment_time = comment.created_utc Temporarily removing last_comment_time as it's causing a buffer
-                    except Exception as e:
-                        logger.error('uhoh%s', (e))
+                try:
+                    st = datetime.datetime.fromtimestamp(comment.created_utc).strftime('%Y-%m-%d %H:%M:%S')
+                    logger.info("User:{} - {}".format(comment.author, st))
+                    logger.info(comment.body )
+                    self.send_updates(comment)
+                    self.last_comment_time = comment.created_utc
+                except Exception as e:
+                    logger.error('uhoh%s', (e))
             else:  
                 if not endless:
                     logger.debug("IM DONE")
@@ -102,7 +96,8 @@ class Scraper:
 
 
     def send_updates(self, comment):
-        if Config.SOCKETS==True:
+        printcfg = Config.SOCKETS
+        if printcfg==True:
             data = comment_dict(comment)
             self.socketio.emit( 'new comment', data, broadcast=True)
         else:
